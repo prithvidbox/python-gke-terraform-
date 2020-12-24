@@ -1,0 +1,94 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: apollo
+  labels:
+    app: apollo-io
+spec:
+  replicas: 3
+  strategy:
+    rollingUpdate:
+      maxSurge: 0  
+      maxUnavailable: 1
+    type: RollingUpdate  
+  selector:
+    matchLabels:
+      app: apollo-io
+  template:
+    metadata:
+      labels:
+        app: apollo-io
+    spec: 
+      containers:
+      - name: apollo-io
+        image: gcr.io/apollo-io-299416/python-sample:v4
+        imagePullPolicy: Always
+        livenessProbe:
+          tcpSocket:
+            port: 5000
+          initialDelaySeconds: 3
+          periodSeconds: 3
+        readinessProbe:
+          tcpSocket:
+            port: 5000
+          initialDelaySeconds: 3
+          periodSeconds: 3       
+        resources:
+          requests:
+            cpu: "50m"
+        ports:
+        - containerPort: 5000
+        volumeMounts:
+        - mountPath: /secure
+          name: test
+      restartPolicy: Always
+      imagePullSecrets: 
+      - name: gcr-secret 
+
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: apollo-lb-service
+spec:
+  type: LoadBalancer
+  selector:
+    app: apollo-io
+  ports:
+  - protocol: TCP
+    port: 443
+    targetPort: 5000
+
+
+---
+apiVersion: autoscaling/v2beta2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: apollo
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: apollo
+  minReplicas: 2
+  maxReplicas: 4
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 50
+
+---
+apiVersion: policy/v1beta1
+kind: PodDisruptionBudget
+metadata:
+  name: apollo 
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: apollo-io
